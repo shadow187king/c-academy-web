@@ -1,0 +1,529 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>C Academy – Web (AI-Generated Curriculum + Spaced Review)</title>
+  <style>
+    :root{--bg:#0f1115;--panel:#12151b;--muted:#818cf8;--text:#e5e7eb;--sub:#a1a1aa;--accent:#6ee7b7;--bad:#f87171;--warn:#fbbf24}
+    *{box-sizing:border-box}
+    body{margin:0;background:var(--bg);color:var(--text);font:14px/1.4 ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto}
+    .app{height:100vh;display:grid;grid-template-rows:48px 1fr}
+    header{display:flex;align-items:center;justify-content:space-between;padding:0 12px;border-bottom:1px solid #222}
+    header .title{display:flex;gap:10px;align-items:center}
+    header .title h1{font-size:14px;margin:0;font-weight:600;color:#fff}
+    header .tag{font-size:12px;color:#9aa;}
+    header .btns{display:flex;gap:8px;flex-wrap:wrap}
+    button{background:#1f2430;border:1px solid #2a3242;color:#e5e7eb;padding:6px 10px;border-radius:10px;cursor:pointer}
+    button.brand{background:linear-gradient(90deg,#6366f1,#06b6d4);border:none}
+    button.ghost{background:#0b1220;border:1px solid #27314a}
+    button:disabled{opacity:.6;cursor:not-allowed}
+    .grid{display:grid;grid-template-columns:320px 1fr 460px;height:calc(100vh - 48px)}
+    .pane{border-right:1px solid #1b1f2a;height:100%;overflow:auto;background:var(--panel)}
+    .pane:last-child{border-right:0}
+    .left{padding:12px}
+    .lesson-title{font-size:16px;font-weight:700;margin:6px 0 8px}
+    .lesson-desc{color:var(--sub);margin-bottom:8px}
+    .ex-list{display:flex;flex-direction:column;gap:8px}
+    .ex{padding:8px;border:1px solid #202636;border-radius:12px;cursor:pointer;background:#0f131a}
+    .ex.active{outline:2px solid var(--muted)}
+    .ex small{color:#9aa}
+    .steps{margin-top:10px}
+    .steps li{margin:6px 0}
+    .hint{margin-top:10px;padding:8px;border-radius:10px;background:#0b1220;border:1px dashed #27314a;color:#c7d2fe}
+    .center{position:relative}
+    #editor{position:absolute;inset:0}
+    .right{display:flex;flex-direction:column}
+    .right .toolbar{display:flex;gap:8px;padding:10px;border-bottom:1px solid #1b1f2a;flex-wrap:wrap}
+    .right .terminal{padding:10px;font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;white-space:pre-wrap;overflow:auto}
+    .statusbar{position:absolute;bottom:10px;left:10px;background:#00000060;padding:6px 10px;border-radius:10px;color:#cbd5e1;font-size:12px}
+    .pill{display:inline-flex;gap:6px;align-items:center;padding:4px 8px;background:#0b1220;border:1px solid #27314a;border-radius:999px;font-size:12px}
+    .good{color:var(--accent)} .bad{color:var(--bad)} .warn{color:var(--warn)}
+    dialog{border:none;border-radius:16px;background:#111826;color:#e5e7eb;padding:18px;max-width:640px}
+    dialog::backdrop{background:rgba(0,0,0,.6)}
+    .row{display:flex;gap:10px;flex-wrap:wrap}
+    label{display:block;margin:6px 0 2px;color:#cbd5e1;font-size:12px}
+    input,select,textarea{width:100%;background:#0b1220;border:1px solid #27314a;color:#e5e7eb;padding:8px;border-radius:10px}
+    .kbd{font:12px ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;background:#00000066;padding:2px 6px;border-radius:6px;border:1px solid #333}
+    .help-tip{color:#c7d2fe}
+    a{color:#93c5fd}
+  </style>
+  <!-- Monaco AMD loader -->
+  <script src="https://unpkg.com/monaco-editor@0.53.0/min/vs/loader.js"></script>
+</head>
+<body>
+  <div class="app">
+    <header>
+      <div class="title"><span class="pill">C Academy</span><h1>Hands-on C (Browser)</h1><span class="tag">Codecademy-style • Free • Online • AI + Spaced Review</span></div>
+      <div class="btns">
+        <button id="aiNextBtn" class="ghost">🎯 AI: Next Best Exercise</button>
+        <button id="aiGenBtn" class="ghost">✨ AI: Generate Custom</button>
+        <button id="runBtn" class="brand">▶ Run & Grade (Ctrl+Enter)</button>
+        <button id="resetBtn">Reset</button>
+        <button id="solutionBtn" title="Reveals after attempts limit">Reveal Solution</button>
+        <button id="settingsBtn" title="AI/Compiler settings">⚙️ Settings</button>
+      </div>
+    </header>
+    <div class="grid">
+      <div class="pane left">
+        <div class="lesson-title">Foundations</div>
+        <div class="lesson-desc">Pick an exercise to load starter code. First run may download the browser compiler (cached).</div>
+        <div id="exList" class="ex-list"></div>
+        <ol id="steps" class="steps"></ol>
+        <div class="hint" id="hintBox" hidden>
+          <b>Hint</b>
+          <div id="hintText"></div>
+        </div>
+      </div>
+      <div class="pane center"><div id="editor"></div><div class="statusbar" id="status">Idle</div></div>
+      <div class="pane right">
+        <div class="toolbar">
+          <span class="pill" id="attemptPill">Attempts: 0/4</span>
+          <span class="pill" id="gradePill">Score: —</span>
+          <span class="pill" id="compilerPill">Compiler: Browser Clang</span>
+          <span class="pill" id="aiPill">AI: off</span>
+          <span class="pill" id="duePill" title="Concepts due for review">Due: 0</span>
+        </div>
+        <div class="terminal" id="term">Ready. Press <span class="kbd">Ctrl</span>+<span class="kbd">Enter</span> to run.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- First-run note -->
+  <dialog id="firstRun">
+    <h3>Heads-up: downloads the compiler on first run</h3>
+    <p>This website runs a real C compiler in your browser via WebAssembly. The first time you hit <b>Run</b>, it will download ~30–100 MB of compiler data (cached by your browser). Afterwards, runs are fast and fully offline.</p>
+    <p class="help-tip">If it stalls, reload the page.</p>
+    <form method="dialog"><button>OK, got it</button></form>
+  </dialog>
+
+  <!-- Settings dialog -->
+  <dialog id="settings">
+    <h3>Settings</h3>
+    <p class="help-tip">Choose how the AI runs: fully in-browser (WebLLM) or via an OpenAI-compatible API. Your key is stored locally.</p>
+    <div class="row">
+      <div style="flex:1">
+        <label>AI Provider</label>
+        <select id="prov">
+          <option value="off">Off</option>
+          <option value="webllm">Browser LLM (WebLLM) – private</option>
+          <option value="openai">OpenAI-compatible API (OpenRouter, OpenAI, etc.)</option>
+        </select>
+      </div>
+      <div style="flex:1">
+        <label>Temperature</label>
+        <input id="temp" type="number" step="0.1" min="0" max="2" />
+      </div>
+    </div>
+    <div id="apiBlock">
+      <label>API Base URL</label>
+      <input id="apiBase" placeholder="https://openrouter.ai/api/v1 or https://api.openai.com/v1" />
+      <label>Model</label>
+      <input id="apiModel" placeholder="e.g. openai/gpt-4o-mini or llama-3.1-8b-instruct" />
+      <label>API Key</label>
+      <input id="apiKey" placeholder="sk-... or or_..." />
+      <small class="help-tip">Some providers require special headers; a tiny proxy is recommended if you hit CORS issues.</small>
+    </div>
+    <div id="webllmBlock">
+      <label>WebLLM Model ID</label>
+      <input id="webllmModel" placeholder="Llama-3.1-8B-Instruct" />
+      <small class="help-tip">First use downloads model shards (hundreds of MB+). Cached afterwards.</small>
+    </div>
+    <form method="dialog" style="margin-top:10px;display:flex;gap:8px;justify-content:flex-end">
+      <button id="saveSettings" class="brand">Save</button>
+      <button>Close</button>
+    </form>
+  </dialog>
+
+  <!-- AI Generate dialog -->
+  <dialog id="aiGen">
+    <h3>AI: Generate a New Exercise</h3>
+    <div class="row">
+      <div style="flex:1">
+        <label>Topic</label>
+        <select id="genTopic">
+          <option>Auto</option>
+          <option>compilation</option>
+          <option>printf</option>
+          <option>variables</option>
+          <option>control flow</option>
+          <option>loops</option>
+          <option>functions</option>
+          <option>pointers</option>
+          <option>arrays</option>
+          <option>strings</option>
+          <option>structs</option>
+          <option>dynamic memory</option>
+          <option>file io</option>
+        </select>
+      </div>
+      <div style="flex:1">
+        <label>Difficulty (1–10)</label>
+        <input id="genDiff" type="number" min="1" max="10" value="3" />
+      </div>
+    </div>
+    <label>Goal (optional)</label>
+    <input id="genGoal" placeholder="e.g. practice pointer arithmetic safely" />
+    <div class="row">
+      <div style="flex:1">
+        <label>Task Type</label>
+        <select id="genTask">
+          <option value="stdout">Compare stdout</option>
+          <option value="stdin_stdout">Reads stdin, compare stdout</option>
+        </select>
+      </div>
+      <div style="flex:1">
+        <label>Attempts limit</label>
+        <input id="genAttempts" type="number" min="1" max="6" value="4" />
+      </div>
+    </div>
+    <div id="genStatus" class="help-tip" style="margin-top:8px"></div>
+    <form method="dialog" style="margin-top:12px;display:flex;gap:8px;justify-content:flex-end">
+      <button id="genSubmit" class="brand">Generate</button>
+      <button>Close</button>
+    </form>
+  </dialog>
+
+  <script type="module">
+    // ---------- External deps ----------
+    import { init, Wasmer, Directory } from "https://unpkg.com/@wasmer/sdk@latest/dist/index.mjs";
+    await init();
+
+    // ---------- Monaco Editor ----------
+    let editor;
+    const monacoReady = new Promise(resolve => {
+      // @ts-ignore
+      require.config({ paths: { 'vs': 'https://unpkg.com/monaco-editor@0.53.0/min/vs' } });
+      // @ts-ignore
+      require(['vs/editor/editor.main'], function () {
+        // @ts-ignore
+        editor = monaco.editor.create(document.getElementById('editor'), {
+          value: '', language: 'c', theme: 'vs-dark', fontSize: 14, automaticLayout: true
+        });
+        resolve();
+      });
+    });
+
+    // ---------- Concepts & Spaced Review ----------
+    const ALL_CONCEPTS = ['compilation','printf','variables','control flow','loops','functions','pointers','arrays','strings','structs','dynamic memory','file io'];
+    // mastery: { concept: { ef:number, interval:number, next:number (epoch ms) } }
+    let mastery = Object.assign(Object.fromEntries(ALL_CONCEPTS.map(c=>[c,{ef:2.5,interval:0,next:0}]}), JSON.parse(localStorage.getItem('mastery')||'{}'));
+    const now = ()=> Date.now();
+    function sm2Update(m, quality){
+      // quality: 0..5 (we use 2,3,4,5). Based on SM-2.
+      let ef = m.ef, interval = m.interval;
+      if (quality >= 3){
+        if (interval === 0) interval = 1;
+        else if (interval === 1) interval = 6;
+        else interval = Math.round(interval * ef);
+        ef = Math.max(1.3, ef + (0.1 - (5 - quality) * (0.08 + (5 - quality) * 0.02)));
+      } else {
+        interval = 1;
+      }
+      const next = now() + interval * 24*60*60*1000;
+      return { ef, interval, next };
+    }
+    function updateMastery(concepts, quality){
+      for (const c of concepts||[]){ mastery[c] = sm2Update(mastery[c]||{ef:2.5,interval:0,next:0}, quality); }
+      localStorage.setItem('mastery', JSON.stringify(mastery));
+      refreshDuePill();
+    }
+    function conceptsDueCount(){ return Object.values(mastery).filter(m=> (m.next||0) <= now()).length; }
+    function weakestConcept(){
+      // Prefer due concepts; else pick lowest EF
+      const due = Object.entries(mastery).filter(([,m])=> (m.next||0) <= now()).map(([k,m])=>({k,score:m.ef}));
+      if (due.length) return due.sort((a,b)=>a.score-b.score)[0].k;
+      return Object.entries(mastery).sort((a,b)=>a[1].ef-b[1].ef)[0][0];
+    }
+
+    // ---------- Built-in exercises ----------
+    const builtins = [
+      { id:'hello', title:'01 • Hello, C!', concepts:['compilation','printf'], steps:[ 'Add <code>#include &lt;stdio.h&gt;</code>.', 'Print exactly <code>Hello, C!</code> followed by a newline using <code>printf</code>.', 'Click <b>Run & Grade</b>.' ], starter:`int main(void){ /* your code */ return 0; }
+`, expected:'Hello, C!
+', hints:[ 'Did you include <stdio.h>?', 'Use printf("Hello, C!\n");', 'Match case and newline exactly.' ], solution:`#include <stdio.h>
+int main(void){ printf("Hello, C!\n"); return 0; }
+`, attemptLimit:4 },
+      { id:'vars', title:'02 • Variables & Format Specifiers', concepts:['variables','printf'], steps:[ 'Declare an <code>int x</code> set to <code>42</code>.', 'Print: <code>x = 42</code> with a newline using <code>printf</code> and <code>%d</code>.' ], starter:`#include <stdio.h>
+int main(void){ /* print: x = 42 */ return 0; }
+`, expected:'x = 42
+', hints:[ 'Use %d for integers.', 'Don\'t forget the newline.' ], solution:`#include <stdio.h>
+int main(void){ int x=42; printf("x = %d\n", x); return 0; }
+`, attemptLimit:4 },
+      { id:'loops', title:'03 • Loops', concepts:['loops'], steps:[ 'Print the numbers 1..5 each on its own line using a for-loop.' ], starter:`#include <stdio.h>
+int main(void){ /* 1..5 */ return 0; }
+`, expected:'1
+2
+3
+4
+5
+', hints:[ 'for(int i=1;i<=5;i++) printf("%d\n", i);' ], solution:`#include <stdio.h>
+int main(void){ for(int i=1;i<=5;i++) printf("%d\n", i); return 0; }
+`, attemptLimit:4 },
+      { id:'functions', title:'04 • Functions', concepts:['functions'], steps:[ 'Write <code>int add(int a,int b)</code> returning a+b.', 'Call it from <code>main</code> to add 7 and 5, printing <code>sum = 12</code> with newline.' ], starter:`#include <stdio.h>
+/* define add here */
+int main(void){ /* call add and print sum = 12 */ return 0; }
+`, expected:'sum = 12
+', hints:[ 'Function prototype: int add(int,int);', 'printf("sum = %d\n", add(7,5));' ], solution:`#include <stdio.h>
+int add(int a,int b){return a+b;}
+int main(void){ printf("sum = %d\n", add(7,5)); return 0; }
+`, attemptLimit:4 }
+    ];
+
+    // ---------- State: exercises + attempts ----------
+    let exercises = JSON.parse(localStorage.getItem('exercises')||'null') || builtins;
+    let current = exercises[0];
+    let attempts = JSON.parse(localStorage.getItem('attempts')||'{}');
+
+    const exList = document.getElementById('exList');
+    const stepsEl = document.getElementById('steps');
+    const hintBox = document.getElementById('hintBox');
+    const hintText = document.getElementById('hintText');
+    const term = document.getElementById('term');
+    const status = document.getElementById('status');
+    const attemptPill = document.getElementById('attemptPill');
+    const gradePill = document.getElementById('gradePill');
+    const solutionBtn = document.getElementById('solutionBtn');
+    const resetBtn = document.getElementById('resetBtn');
+    const runBtn = document.getElementById('runBtn');
+    const aiPill = document.getElementById('aiPill');
+    const duePill = document.getElementById('duePill');
+
+    function refreshDuePill(){ duePill.textContent = 'Due: '+conceptsDueCount(); }
+
+    function renderList(){
+      exList.innerHTML = '';
+      exercises.forEach(ex => {
+        const div = document.createElement('div');
+        div.className = 'ex' + (ex.id===current.id?' active':'');
+        const a = attempts[ex.id]||{tries:0,passed:false};
+        const concepts = (ex.concepts||[]).map(c=>`<code>${c}</code>`).join(' ');
+        div.innerHTML = `<div>${ex.title}</div><small>${concepts} • ${a.passed?'<span class="good">Passed</span>':'Not passed'}</small>`;
+        div.onclick = ()=> selectEx(ex.id);
+        exList.appendChild(div);
+      });
+    }
+
+    async function selectEx(id){
+      current = exercises.find(e=>e.id===id);
+      await monacoReady;
+      // @ts-ignore
+      editor.setValue(current.starter);
+      stepsEl.innerHTML = current.steps.map(s=>`<li>${s}</li>`).join('');
+      hintBox.hidden = true; hintText.textContent = '';
+      updateUI();
+    }
+
+    function updateUI(){
+      const a = attempts[current.id]||{tries:0,passed:false};
+      attemptPill.textContent = `Attempts: ${a.tries||0}/${current.attemptLimit||4}`;
+      gradePill.textContent = a.passed? 'Score: 100' : 'Score: —';
+      solutionBtn.disabled = !a.tries || a.tries < (current.attemptLimit||4);
+      renderList(); refreshDuePill();
+    }
+
+    // First selection
+    await selectEx(exercises[0].id);
+
+    // ---------- Compiler via Wasmer ----------
+    const compilerPill = document.getElementById('compilerPill');
+    let clangPkg = null;
+
+    async function ensureClang(){
+      if (!clangPkg){
+        const dlg = document.getElementById('firstRun');
+        if (!localStorage.getItem('clang-notice')){ dlg.showModal(); localStorage.setItem('clang-notice','1'); }
+        compilerPill.textContent = 'Compiler: downloading…';
+        clangPkg = await Wasmer.fromRegistry('clang/clang');
+        compilerPill.textContent = 'Compiler: Browser Clang';
+      }
+      return clangPkg;
+    }
+
+    async function compileToWasm(source){
+      await ensureClang();
+      const project = new Directory();
+      await project.writeFile('main.c', source);
+      const clang = await ensureClang();
+      let build = await clang.entrypoint.run({ args: ['/project/main.c', '-O0', '-Wno-implicit-int', '-o', '/project/a.wasm'], mount: { '/project': project } });
+      const r = await build.wait();
+      const stdout = r.stdout||''; const stderr = r.stderr||'';
+      return { ok: r.ok, stdout, stderr, project };
+    }
+
+    async function runWasm(project, stdin=''){
+      const wasmBytes = await project.readFile('a.wasm');
+      const program = await Wasmer.fromFile(wasmBytes);
+      const inst = await program.entrypoint.run({ stdin });
+      const out = await inst.wait();
+      return { stdout: out.stdout||'', stderr: out.stderr||'', code: out.code||0 };
+    }
+
+    async function runAndGrade(){
+      runBtn.disabled = true; status.textContent = 'Compiling…'; term.textContent = '';
+      try{
+        const code = editor.getValue();
+        const build = await compileToWasm(code);
+        if (!build.ok){ term.innerText = (build.stderr||'') + '
+' + (build.stdout||''); status.textContent = 'Compilation failed'; bumpAttempt(false, 'compile'); return; }
+        status.textContent = 'Running…';
+        const stdin = current.stdin || '';
+        const runr = await runWasm(build.project, stdin);
+        term.textContent = (runr.stdout? runr.stdout : '') + (runr.stderr? ('
+' + runr.stderr):'');
+        const expected = current.expected;
+        if (runr.stdout === expected){
+          status.textContent = '✅ Passed'; gradePill.textContent = 'Score: 100';
+          // Estimate quality from attempts
+          const prev = attempts[current.id]?.tries||0; const thisTry = prev + 1;
+          const q = thisTry===1?5 : thisTry===2?4 : thisTry===3?3 : 3;
+          updateMastery(current.concepts||[], q);
+          bumpAttempt(true, 'ok');
+        } else {
+          status.textContent = '❌ Output mismatch';
+          const diff = makeDiff(runr.stdout, expected);
+          term.innerHTML = `<div><b>Expected:</b>
+<pre>${escapeHtml(expected)}</pre></div>`+`<div><b>Got:</b>
+<pre>${escapeHtml(runr.stdout)}</pre></div>`+`<div class="warn">${diff}</div>`;
+          bumpAttempt(false, 'mismatch');
+          // Penalize mastery slightly for targeted concepts
+          updateMastery(current.concepts||[], 2);
+        }
+      } catch (e){ status.textContent = 'Error'; term.textContent = String(e?.message||e); bumpAttempt(false, 'error'); }
+      finally { runBtn.disabled = false; }
+    }
+
+    function makeDiff(got, exp){ if (got===exp) return 'identical'; const g = got.split(/
+?
+/), e = exp.split(/
+?
+/); let out = ''; const n = Math.max(g.length, e.length); for (let i=0;i<n;i++){ const a=g[i]??'', b=e[i]??''; if (a!==b) out += `Line ${i+1}: expected “${b}” but got “${a}”.
+`; } return out || 'Whitespace differs? Check newlines.'; }
+
+    function bumpAttempt(passed){ const a = attempts[current.id]||{tries:0,passed:false}; if (!a.passed){ a.tries = (a.tries||0) + 1; a.passed = passed; } attempts[current.id]=a; localStorage.setItem('attempts', JSON.stringify(attempts)); updateUI(); if (!a.passed && a.tries>=3){ hintBox.hidden = false; hintText.innerHTML = current.hints?.[Math.min(a.tries-3, (current.hints||[]).length-1)]||'Check types and headers.'; } }
+
+    function escapeHtml(s){ return s.replace(/[&<>]/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;"})[c]); }
+
+    // Buttons & keys
+    document.getElementById('runBtn').onclick = runAndGrade;
+    document.getElementById('resetBtn').onclick = ()=>{ editor.setValue(current.starter); term.textContent='Reset to starter.'; status.textContent='Idle'; };
+    document.getElementById('solutionBtn').onclick = ()=>{ const a = attempts[current.id]||{tries:0}; const lim = current.attemptLimit||4; if (a.tries<lim){ alert('Solution unlocks after '+lim+' attempts.'); return; } editor.setValue(current.solution); term.textContent = 'Solution revealed. Try running it!'; };
+    window.addEventListener('keydown', (e)=>{ if ((e.ctrlKey||e.metaKey) && e.key==='Enter'){ e.preventDefault(); runAndGrade(); } });
+
+    // ---------- AI config ----------
+    const defaultCfg = { provider: 'off', temperature: 0.3, apiBase: 'https://openrouter.ai/api/v1', apiModel: 'openai/gpt-4o-mini', apiKey: '', webllmModel: 'Llama-3.1-8B-Instruct' };
+    let cfg = Object.assign({}, defaultCfg, JSON.parse(localStorage.getItem('aiCfg')||'{}'));
+    const aiPillUpdate = ()=> aiPill.textContent = cfg.provider==='off' ? 'AI: off' : (`AI: ${cfg.provider}`);
+    aiPillUpdate(); refreshDuePill();
+
+    // Settings dialog
+    const settingsDlg = document.getElementById('settings');
+    document.getElementById('settingsBtn').onclick = ()=>{ loadSettings(); settingsDlg.showModal(); };
+    function loadSettings(){ setVal('prov', cfg.provider); setVal('temp', cfg.temperature); setVal('apiBase', cfg.apiBase); setVal('apiModel', cfg.apiModel); setVal('apiKey', cfg.apiKey); setVal('webllmModel', cfg.webllmModel); toggleBlocks(); }
+    function setVal(id, v){ const el = document.getElementById(id); if (el) el.value = v ?? ''; }
+    function toggleBlocks(){ document.getElementById('apiBlock').style.display = (document.getElementById('prov').value==='openai')?'block':'none'; document.getElementById('webllmBlock').style.display = (document.getElementById('prov').value==='webllm')?'block':'none'; }
+    document.getElementById('prov').addEventListener('change', toggleBlocks);
+    document.getElementById('saveSettings').onclick = ()=>{ cfg.provider = getVal('prov'); cfg.temperature = parseFloat(getVal('temp'))||0.3; cfg.apiBase = getVal('apiBase'); cfg.apiModel = getVal('apiModel'); cfg.apiKey = getVal('apiKey'); cfg.webllmModel = getVal('webllmModel'); localStorage.setItem('aiCfg', JSON.stringify(cfg)); aiPillUpdate(); };
+    function getVal(id){ const el = document.getElementById(id); return el? el.value: ''; }
+
+    // ---------- LLM Provider Implementations ----------
+    let webllmEngine = null;
+    async function callLLM(messages){
+      if (cfg.provider==='off') throw new Error('AI provider is off. Open Settings (⚙️) to enable.');
+      if (cfg.provider==='webllm'){
+        status.textContent = 'Loading WebLLM… (first run is large)';
+        const mod = await import('https://esm.run/@mlc-ai/web-llm');
+        if (!webllmEngine){ webllmEngine = await mod.CreateMLCEngine(cfg.webllmModel||'Llama-3.1-8B-Instruct', { initProgressCallback: (p)=> status.textContent = `Model load: ${Math.floor((p?.progress||0)*100)}%` }); }
+        const reply = await webllmEngine.chat.completions.create({ messages, temperature: cfg.temperature });
+        return reply.choices?.[0]?.message?.content || '';
+      } else if (cfg.provider==='openai'){
+        const url = (cfg.apiBase||'').replace(/\/$/,'') + '/chat/completions';
+        const headers = { 'Content-Type':'application/json', 'Authorization': 'Bearer '+cfg.apiKey };
+        if (/anthropic/i.test(cfg.apiBase||'')) headers['anthropic-dangerous-direct-browser-access'] = 'true';
+        const body = { model: cfg.apiModel, temperature: cfg.temperature, response_format: { type: 'json_object' }, messages };
+        const res = await fetch(url, { method:'POST', headers, body: JSON.stringify(body) });
+        if (!res.ok){ const t = await res.text(); throw new Error('LLM HTTP '+res.status+': '+t); }
+        const json = await res.json();
+        const content = json?.choices?.[0]?.message?.content || '';
+        return content;
+      } else { throw new Error('Unknown provider'); }
+    }
+
+    // ---------- AI Exercise Generation (Custom & Next Best) ----------
+    const aiGenDlg = document.getElementById('aiGen');
+    document.getElementById('aiGenBtn').onclick = ()=>{ aiGenDlg.showModal(); };
+    document.getElementById('genSubmit').onclick = async ()=>{
+      const topic = getVal('genTopic');
+      const diff = parseInt(getVal('genDiff'))||3;
+      const goal = getVal('genGoal');
+      const taskType = getVal('genTask');
+      const attemptLimit = parseInt(getVal('genAttempts'))||4;
+      const out = document.getElementById('genStatus');
+      out.textContent = 'Thinking…';
+      try{ const ex = await aiGenerate({ topic, difficulty: diff, goal, taskType, attemptLimit }); await validateAndAdd(ex, out); }
+      catch(err){ out.textContent = '❌ '+(err?.message||err); }
+    };
+
+    document.getElementById('aiNextBtn').onclick = async ()=>{
+      const concept = weakestConcept();
+      // Map EF to difficulty: lower EF → higher priority but modest diff
+      const ef = mastery[concept]?.ef||2.5;
+      const difficulty = Math.min(10, Math.max(2, Math.round(6 - (ef-1.3))));
+      const prompt = `Focus tightly on ${concept}. Include at least one small edge case.`;
+      status.textContent = 'AI picking next best exercise…';
+      try{ const ex = await aiGenerate({ topic: concept, difficulty, goal: prompt, taskType:'stdout', attemptLimit:4, concepts:[concept] }); await validateAndAdd(ex); }
+      catch(e){ term.textContent = 'AI next-best error: '+(e?.message||e); }
+    };
+
+    async function aiGenerate({ topic, difficulty, goal, taskType, attemptLimit, concepts }){
+      const schema = 'Schema: { id, title, steps[], starter, expected, stdin?, hints[], solution, attemptLimit, concepts[] }. ';
+      const rules = 'Rules: single-file C17, stdout comparison, 10–30 lines, no UB, hints from general→specific, escape newlines as \n, id is dash-case, concepts from this list: '+ALL_CONCEPTS.join(', ')+'. ';
+      const sys = { role:'system', content: 'You are a senior C instructor. Output STRICT JSON only. '+schema+rules };
+      const user = { role:'user', content: JSON.stringify({ topic, difficulty, goal, taskType, attemptLimit, concepts }) };
+      const raw = await callLLM([sys, user]);
+      const ex = safeParseJSON(raw);
+      if (!ex || !ex.title || !ex.starter || !ex.expected || !ex.solution) throw new Error('Bad JSON from AI');
+      if (!Array.isArray(ex.concepts) || !ex.concepts.length){ ex.concepts = topic && topic!=='Auto' ? [String(topic)] : ['compilation']; }
+      ex.attemptLimit = attemptLimit || ex.attemptLimit || 4;
+      return ex;
+    }
+
+    async function validateAndAdd(ex, outEl){
+      status.textContent = 'Validating AI exercise…';
+      // 1) Compile
+      let build = await compileToWasm(ex.solution);
+      if (!build.ok){ if (outEl) outEl.textContent = 'AI solution failed to compile – retrying fix…'; const fixed = await aiRepair(ex, build.stderr||build.stdout||'compile error'); if (!fixed) throw new Error('Could not auto-repair exercise. Try again.'); ex = fixed; build = await compileToWasm(ex.solution); if (!build.ok) throw new Error('Validation failed after repair (compile).'); }
+      // 2) Run & compare
+      const runr = await runWasm(build.project, ex.stdin||'');
+      if ((runr.stdout||'') !== ex.expected){ if (outEl) outEl.textContent = 'AI solution mismatch – retrying fix…'; const fixed2 = await aiRepair(ex, 'Expected '+JSON.stringify(ex.expected)+' but got '+JSON.stringify(runr.stdout)); if (fixed2) ex = fixed2; const runr2 = await runWasm((await compileToWasm(ex.solution)).project, ex.stdin||''); if ((runr2.stdout||'') !== ex.expected) throw new Error('Validation failed after repair (run).'); }
+      exercises.push(ex); localStorage.setItem('exercises', JSON.stringify(exercises)); renderList(); selectEx(ex.id); if (outEl) outEl.textContent = '✅ Exercise added: '+ex.title;
+    }
+
+    async function aiRepair(ex, errorText){
+      try{ const sys = { role:'system', content: 'You are repairing a prior JSON exercise for C. Return FULL corrected JSON only.' }; const usr = { role:'user', content: JSON.stringify({ previous: ex, error: String(errorText) }) }; const raw = await callLLM([sys, usr]); const fixed = safeParseJSON(raw); if (!fixed || !fixed.solution || !fixed.expected) return null; return fixed; } catch { return null; }
+    }
+
+    function safeParseJSON(s){ try{ return JSON.parse(s); } catch{ try{ const trimmed = s.substring(s.indexOf('{'), s.lastIndexOf('}')+1); return JSON.parse(trimmed); } catch{ return null; } } }
+
+    // Initial UI render
+    renderList(); updateUI();
+  </script>
+
+  <!--
+  ===== Optional: Tiny Cloudflare Worker proxy (paste into workers.cloudflare.com) =====
+  export default {
+    async fetch(req, env) {
+      const url = new URL(req.url);
+      if (req.method !== 'POST' || !url.pathname.endsWith('/chat/completions')) return new Response('Not found', {status:404});
+      const body = await req.json();
+      // Forward to provider (OpenRouter as example)
+      const r = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+        method: 'POST', headers: { 'Content-Type':'application/json', 'Authorization':'Bearer '+env.OPENROUTER_API_KEY }, body: JSON.stringify(body)
+      });
+      const txt = await r.text();
+      return new Response(txt, { status: r.status, headers: { 'Access-Control-Allow-Origin': '*', 'Content-Type':'application/json' }});
+    }
+  }
+  -->
+</body>
+</html>
